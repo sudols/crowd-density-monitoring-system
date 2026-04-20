@@ -1,0 +1,23 @@
+model:
+  name: "yolo12n.pt"
+  confidence: 0.5
+  person_class: 0
+
+density:
+  green_max: 1
+  yellow_max: 2
+
+alerts:
+  enabled: true
+  message: "ALERT: Area overcrowded! Please clear the area immediately!"
+  sound_enabled: false
+
+video:
+  source: 2
+  show_fps: true
+  show_boxes: true
+
+display:
+  window_name: "Crowd Monitoring System"
+  font_scale: 0.7
+  box_thickness: 2

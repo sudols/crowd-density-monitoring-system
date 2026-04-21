@@ -17,6 +17,11 @@ video:
   show_fps: true
   show_boxes: true
 
+liveness:
+  enabled: true
+  stale_frame_seconds: 2.0
+  max_read_failures: 10
+
 display:
   window_name: "Crowd Monitoring System"
   font_scale: 0.7

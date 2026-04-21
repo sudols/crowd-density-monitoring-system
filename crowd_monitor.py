@@ -1,8 +1,10 @@
 import cv2
+import numpy as np
 
 from crowd_monitoring.config import load_config
 from crowd_monitoring.density import get_status
 from crowd_monitoring.detector import detect_people, load_model
+from crowd_monitoring.liveness import LivenessChecker, liveness_color
 from crowd_monitoring.visualization import draw_info
  
  
@@ -18,6 +20,13 @@ def main():
     show_boxes = config["video"]["show_boxes"]
     window_name = config["display"]["window_name"]
     camera_source = config["video"]["source"]
+
+    liveness_config = config.get("liveness", {})
+    liveness_enabled = liveness_config.get("enabled", True)
+    liveness = LivenessChecker(
+        stale_frame_seconds=liveness_config.get("stale_frame_seconds", 2.0),
+        max_read_failures=liveness_config.get("max_read_failures", 10),
+    )
  
     cap = cv2.VideoCapture(camera_source, cv2.CAP_V4L2)
     cap.set(3, 640)
@@ -26,19 +35,55 @@ def main():
     if not cap.isOpened():
         print("Error: Cannot open camera")
         return
- 
+
     print("Starting... Press 'q' to quit")
- 
+    last_good_frame = None
+
     while True:
         ret, frame = cap.read()
+
+        if liveness_enabled:
+            live_state, live_message = liveness.update(ret, frame)
+            live_color = liveness_color(live_state)
+        else:
+            live_state, live_message, live_color = "DISABLED", "Liveness disabled", (150, 150, 150)
+
         if not ret:
+            if last_good_frame is not None:
+                error_frame = last_good_frame.copy()
+            else:
+                error_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+            cv2.putText(error_frame, f"Liveness: {live_state}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, live_color, 2)
+            cv2.putText(error_frame, live_message, (20, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (220, 220, 220), 1)
+
+            if live_state == "CRITICAL":
+                cv2.putText(error_frame, "Camera disconnected or unavailable", (20, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+            cv2.imshow(window_name, error_frame)
+            if cv2.waitKey(100) & 0xFF == ord('q'):
+                break
             continue
- 
+
+        last_good_frame = frame.copy()
+
         people = detect_people(model, frame, confidence, person_class)
         count = len(people)
         status, color = get_status(count, green_max, yellow_max)
- 
-        frame = draw_info(frame, count, status, color, green_max, alert_msg, show_boxes, people)
+
+        frame = draw_info(
+            frame,
+            count,
+            status,
+            color,
+            green_max,
+            alert_msg,
+            show_boxes,
+            people,
+            live_state,
+            live_message,
+            live_color,
+        )
  
         cv2.imshow(window_name, frame)
  

@@ -5,6 +5,7 @@ from crowd_monitoring.config import load_config
 from crowd_monitoring.density import get_status
 from crowd_monitoring.detector import detect_people, load_model
 from crowd_monitoring.liveness import LivenessChecker, liveness_color
+from crowd_monitoring.anti_spoof import MotionSpoofFilter
 from crowd_monitoring.visualization import draw_info
  
  
@@ -27,6 +28,17 @@ def main():
         stale_frame_seconds=liveness_config.get("stale_frame_seconds", 2.0),
         max_read_failures=liveness_config.get("max_read_failures", 10),
     )
+
+    anti_spoof_config = config.get("anti_spoof", {})
+    anti_spoof_enabled = anti_spoof_config.get("enabled", True)
+    spoof_label = anti_spoof_config.get("label", "SPOOF/STATIC")
+    motion_filter = MotionSpoofFilter(
+        motion_threshold=anti_spoof_config.get("motion_threshold", 0.01),
+        static_frames=anti_spoof_config.get("static_frames", 15),
+        min_box_size=anti_spoof_config.get("min_box_size", 20),
+        key_grid=anti_spoof_config.get("key_grid", 20),
+        diff_threshold=anti_spoof_config.get("diff_threshold", 25),
+    )
  
     cap = cv2.VideoCapture(camera_source, cv2.CAP_V4L2)
     cap.set(3, 640)
@@ -38,6 +50,7 @@ def main():
 
     print("Starting... Press 'q' to quit")
     last_good_frame = None
+    previous_frame = None
 
     while True:
         ret, frame = cap.read()
@@ -49,6 +62,7 @@ def main():
             live_state, live_message, live_color = "DISABLED", "Liveness disabled", (150, 150, 150)
 
         if not ret:
+            motion_filter.static_counts = {}
             if last_good_frame is not None:
                 error_frame = last_good_frame.copy()
             else:
@@ -66,9 +80,17 @@ def main():
             continue
 
         last_good_frame = frame.copy()
+        original_frame = frame.copy()
 
         people = detect_people(model, frame, confidence, person_class)
-        count = len(people)
+
+        blocked_people = []
+        if anti_spoof_enabled:
+            valid_people, blocked_people = motion_filter.filter_people(frame, previous_frame, people)
+        else:
+            valid_people = people
+
+        count = len(valid_people)
         status, color = get_status(count, green_max, yellow_max)
 
         frame = draw_info(
@@ -79,11 +101,15 @@ def main():
             green_max,
             alert_msg,
             show_boxes,
-            people,
+            valid_people,
             live_state,
             live_message,
             live_color,
+            blocked_people,
+            spoof_label,
         )
+
+        previous_frame = original_frame
  
         cv2.imshow(window_name, frame)
  

@@ -1,7 +1,21 @@
 import cv2
 
 
-def draw_info(frame, count, status, color, green_max, alert_msg, show_boxes, boxes, live_state, live_message, live_color):
+def draw_info(
+    frame,
+    count,
+    status,
+    color,
+    green_max,
+    alert_msg,
+    show_boxes,
+    boxes,
+    live_state,
+    live_message,
+    live_color,
+    blocked_boxes,
+    spoof_label,
+):
     cv2.rectangle(frame, (10, 10), (360, 190), (0, 0, 0), -1)
     cv2.rectangle(frame, (10, 10), (360, 190), color, 3)
 
@@ -20,5 +34,11 @@ def draw_info(frame, count, status, color, green_max, alert_msg, show_boxes, box
         for box in boxes:
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+        for box in blocked_boxes:
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+            text_y = y1 - 10 if y1 > 20 else y1 + 20
+            cv2.putText(frame, spoof_label, (x1, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
 
     return frame

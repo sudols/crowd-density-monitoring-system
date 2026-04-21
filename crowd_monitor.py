@@ -1,58 +1,17 @@
 import cv2
-import yaml
-from ultralytics import YOLO
- 
- 
-def load_config():
-    with open("config.yaml", "r") as f:
-        return yaml.safe_load(f)
- 
- 
-def get_status(count, green_max, yellow_max):
-    if count <= green_max:
-        return "GREEN", (0, 255, 0)
-    elif count <= yellow_max:
-        return "YELLOW", (0, 255, 255)
-    else:
-        return "RED", (0, 0, 255)
- 
- 
-def draw_info(frame, count, status, color, green_max, alert_msg, show_boxes, boxes):
-    cv2.rectangle(frame, (10, 10), (320, 150), (0, 0, 0), -1)
-    cv2.rectangle(frame, (10, 10), (320, 150), color, 3)
- 
-    cv2.putText(frame, f"Count: {count}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-    cv2.putText(frame, f"Status: {status}", (20, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-    cv2.putText(frame, f"Green: 0-{green_max}", (20, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
- 
-    if status == "RED":
-        h = frame.shape[0]
-        cv2.rectangle(frame, (10, h-60), (frame.shape[1]-10, h-10), (0, 0, 255), -1)
-        cv2.putText(frame, alert_msg, (20, h-25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
- 
-    if show_boxes:
-        for box in boxes:
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
- 
-    return frame
- 
- 
-def detect_people(model, frame, confidence):
-    results = model(frame, conf=confidence, verbose=False)
-    people = []
-    for result in results:
-        for box in result.boxes:
-            if int(box.cls[0]) == 0:
-                people.append(box)
-    return people
+
+from crowd_monitoring.config import load_config
+from crowd_monitoring.density import get_status
+from crowd_monitoring.detector import detect_people, load_model
+from crowd_monitoring.visualization import draw_info
  
  
 def main():
     config = load_config()
-    model = YOLO(config["model"]["name"])
- 
+    model = load_model(config["model"]["name"])
+
     confidence = config["model"]["confidence"]
+    person_class = config["model"]["person_class"]
     green_max = config["density"]["green_max"]
     yellow_max = config["density"]["yellow_max"]
     alert_msg = config["alerts"]["message"]
@@ -75,7 +34,7 @@ def main():
         if not ret:
             continue
  
-        people = detect_people(model, frame, confidence)
+        people = detect_people(model, frame, confidence, person_class)
         count = len(people)
         status, color = get_status(count, green_max, yellow_max)
  
